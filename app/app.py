@@ -6,7 +6,7 @@ app = Flask(__name__)
 @app.route("/")
 def hello():
     hostname = socket.gethostname()
-    return f"Hello from EKS! Served by pod on host: {hostname}\n"
+    return f"Hello from EKS v2! Deployed via GitHub Actions CI/CD. Host: {hostname}\n"
 
 @app.route("/health")
 def health():
