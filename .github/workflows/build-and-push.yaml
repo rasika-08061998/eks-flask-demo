@@ -1,4 +1,4 @@
-name: Build and Push to ECR
+name: Build, Push, and Deploy
 
 on:
   push:
@@ -37,12 +37,41 @@ jobs:
           echo "Repository: $ECR_REPOSITORY"
           echo "Image tag: $IMAGE_TAG"
 
-          # Build image
           docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-
-          # Push commit-sha tag
           docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-          # Also tag and push 'latest'
           docker tag $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $REGISTRY/$ECR_REPOSITORY:latest
           docker push $REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      CLUSTER_NAME: "eks-flask-demo"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS cluster
+        run: |
+          aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f Kubernetes/deployment.yaml
+          kubectl apply -f Kubernetes/service.yaml
+
+      - name: Restart deployment to pick up new image
+        run: |
+          kubectl rollout restart deployment/flask-app-deployment
+          kubectl rollout status deployment/flask-app-deployment
